@@ -44,7 +44,7 @@ HEADERS = {
 
 # App configuration
 MAX_MESSAGES = 2  # Hard limit of 2 messages
-TIMEOUT_SECONDS = 60  # Increased timeout to 60 seconds
+TIMEOUT_SECONDS = 120  # Increased timeout to 120 seconds
 
 def initialize_session_state():
     """Initialize session state variables if they don't exist"""
@@ -88,7 +88,7 @@ def send_message_to_webhook(session_id: str, user_input: str) -> Dict:
         response.raise_for_status()
         return response.json()
     except requests.Timeout:
-        st.error("O servidor está demorando para responder. Por favor, aguarde um momento e tente novamente.")
+        st.error("O servidor está a demorar para responder. Por favor, aguarde um momento e tente novamente.")
         return {"output": "Tempo limite excedido. Por favor, tente novamente em alguns instantes."}
     except requests.RequestException as e:
         st.error(f"Request failed: {str(e)}")
@@ -111,7 +111,7 @@ def main():
     
     # Check message limit before showing input
     if len(st.session_state.messages) >= MAX_MESSAGES * 2:  # *2 because each interaction has 2 messages (user + assistant)
-        st.warning("Você atingiu o limite de 2 anúncios.")
+        st.warning("Atingiu o limite de 2 anúncios.")
         st.stop()
     
     # Chat input with placeholder
