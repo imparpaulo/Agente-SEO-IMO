@@ -29,16 +29,22 @@ hide_menu_style = """
 st.markdown(hide_menu_style, unsafe_allow_html=True)
 
 # Constants
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://n8n-a48r.onrender.com/webhook/invoke_agent")
-BEARER_TOKEN = os.getenv("BEARER_TOKEN", "teste01")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+BEARER_TOKEN = os.getenv("BEARER_TOKEN")
+
+# Validate required environment variables
+if not WEBHOOK_URL or not BEARER_TOKEN:
+    st.error("Missing required environment variables. Please check your .env file.")
+    st.stop()
+
 HEADERS = {
     "Authorization": f"Bearer {BEARER_TOKEN}",
     "Content-Type": "application/json"
 }
 
-# Add these constants from .env
-MAX_MESSAGES = int(os.getenv("MAX_MESSAGES", 50))
-TIMEOUT_SECONDS = int(os.getenv("TIMEOUT_SECONDS", 30))
+# App configuration
+MAX_MESSAGES = 2  # Hard limit of 2 messages
+TIMEOUT_SECONDS = 60  # Increased timeout to 60 seconds
 
 def initialize_session_state():
     """Initialize session state variables if they don't exist"""
@@ -48,10 +54,6 @@ def initialize_session_state():
         st.session_state.messages = []
     if "message_count" not in st.session_state:
         st.session_state.message_count = 0
-
-    # Cleanup old messages if too many
-    if len(st.session_state.messages) > MAX_MESSAGES:
-        st.session_state.messages = st.session_state.messages[-MAX_MESSAGES:]
 
 def display_chat_history():
     """Display all messages in the chat history"""
@@ -81,10 +83,13 @@ def send_message_to_webhook(session_id: str, user_input: str) -> Dict:
             WEBHOOK_URL,
             headers=HEADERS,
             json=payload,
-            timeout=TIMEOUT_SECONDS  # Use environment variable
+            timeout=(5, TIMEOUT_SECONDS)  # (connection timeout, read timeout)
         )
         response.raise_for_status()
         return response.json()
+    except requests.Timeout:
+        st.error("O servidor está demorando para responder. Por favor, aguarde um momento e tente novamente.")
+        return {"output": "Tempo limite excedido. Por favor, tente novamente em alguns instantes."}
     except requests.RequestException as e:
         st.error(f"Request failed: {str(e)}")
         return {"output": "Desculpe, ocorreu um erro ao processar seu pedido. Por favor, tente novamente."}
@@ -92,17 +97,22 @@ def send_message_to_webhook(session_id: str, user_input: str) -> Dict:
 def main():
     st.title("Análise e Otimização de Anúncios Imobiliários")
     
-    # Add reset button in sidebar
-    if st.sidebar.button("Nova Conversa"):
-        st.session_state.messages = []
-        st.session_state.session_id = str(uuid.uuid4())
-        st.rerun()
+    # Add instructions
+    st.markdown("""
+    #### Basta fazer copy/paste do seu anúncio original
+    #### Limite: 2 anúncios por sessão
+    """)
     
     # Initialize session state
     initialize_session_state()
     
     # Display chat history
     display_chat_history()
+    
+    # Check message limit before showing input
+    if len(st.session_state.messages) >= MAX_MESSAGES * 2:  # *2 because each interaction has 2 messages (user + assistant)
+        st.warning("Você atingiu o limite de 2 anúncios.")
+        st.stop()
     
     # Chat input with placeholder
     if user_input := st.chat_input(
@@ -117,12 +127,12 @@ def main():
         
         # Get bot response with proper loading state
         with st.chat_message("assistant"):
-            with st.spinner("Analisando seu anúncio..."):
+            with st.spinner("Analisando o seu anúncio..."):
                 response = send_message_to_webhook(
                     st.session_state.session_id,
                     user_input
                 )
-                bot_response = response.get("output", "Desculpe, não foi possível processar sua solicitação.")
+                bot_response = response.get("output", "Desculpe, não foi possível processar a sua solicitação.")
                 st.write(bot_response)
                 add_message("assistant", bot_response)
 
